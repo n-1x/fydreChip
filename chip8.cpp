@@ -110,7 +110,7 @@ void Chip8::printMemory()
 	std::cout << std::endl << "End of memory dump." << std::endl;	
 }
 
-void Chip8::loadRom(char *filePath)
+void Chip8::loadRom(const char *filePath)
 {
 	std::ifstream file(filePath, std::ios::in | 
 			             std::ios::binary | 
@@ -277,10 +277,8 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0xD: //DRW Vx, Vy, nibble
-			//TODO: draw sprite at I at x, y
+			  //TODO: draw sprite at I at x, y
 			
-			//for n byte sprite
-			std::cout << "Draw Sprite" << std::endl;
 			break;
 
 		case 0xE:
@@ -326,9 +324,7 @@ void Chip8::execute(const twoByte &instruction)
 					break;
 
 				case 0x29: //LS F, Vx
-					//TODO: load font sprite rep. value Vx
-					std::cout << "LS F, Vx" << std::endl;
-				        ip -= 2; //run same instruction again
+					I = V[x] * 5; //each char is 5 bytes
 					break;
 
 				case 0x33: //LD B, Vx
@@ -364,13 +360,13 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		default:
-			std::cout << "Unknown instruction." << std::endl;
+			printf("Unknown instruction: 0x%04X\n", instruction );
 			break;
 
 	}
 }
 
-void Chip8::runSingleInstruction()
+void Chip8::runSingleCycle()
 {
 	//fetch, then send to execute()
 	twoByte instruction = 0;
@@ -385,5 +381,10 @@ void Chip8::runSingleInstruction()
 	printf("\nrunning opcode: %04X\n", instruction);
 
 	ip += 2; //inc ip
+	execute(instruction);
+}
+
+void Chip8::runInstruction(const twoByte &instruction)
+{
 	execute(instruction);
 }
