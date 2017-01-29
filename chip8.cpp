@@ -3,11 +3,19 @@
 #include <iostream>
 #include "chip8.h"
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 
 Chip8::Chip8()
 {
 	memInit();
+	//TODO: Random seed
+	srand(198276376);
+}
+
+void Chip8::loadFont()
+{
+	//TODO: Load font to memory s. at 0	
 }
 
 void Chip8::memInit()
@@ -20,9 +28,9 @@ void Chip8::memInit()
 
 	for(int i = 0; i < NUM_REGS; i++)
 	{
-		registers[i] = 0;
+		V[i] = 0;
 
-		//CAREFULL, assert stacksize = num registers
+		//CAREFULL, assert stacksize = num V
 		stack[i] = 0;    
 	}
 	ip = PROG_START_ADDR; //where programs start
@@ -30,6 +38,7 @@ void Chip8::memInit()
 	st = 0;
 	dt = 0;
 
+	loadFont();
 	std::cout << "Memory initialised." << std::endl;
 }
 
@@ -41,7 +50,7 @@ void Chip8::printMemory()
 	std::cout << "Registers" << std::endl;
 	for(int i = 0; i < NUM_REGS; i++)
 	{
-		 printf("V[%X]: %04X\n", i, registers[i]);
+		 printf("V[%X]: %04X\n", i, V[i]);
 	}
 
 	std::cout << "\nStack" << std::endl;
@@ -50,11 +59,11 @@ void Chip8::printMemory()
 		printf("%X: %04X\n", i, stack[i]);
 	}
 
-	printf("\nStack pointer: %02X\n", sp);
-	printf("\nSound Timer: %02X\n", st);
-	printf("\nDelay Timer: %02X\n", dt);	
+	printf("Stack pointer: %02X\n", sp);
+	printf("Sound Timer: %02X\n", st);
+	printf("Delay Timer: %02X\n", dt);	
 
-	printf("\nIP: %04X\n", ip);
+	printf("IP: %04X\n", ip);
 
 	std::cout << std::endl << "Main Memory:" << std::endl;
 
@@ -104,10 +113,13 @@ void Chip8::loadRom(char *filePath)
 
 void Chip8::execute(const twoByte &instruction)
 {
-	printf("Parsing instruction: %04X\n", instruction);
-	
 	int leftNibble = (instruction & 0xF000) >> 12;
-	int regIndex = 0, regIndex2 = 0; //indexes of registers, used by some opcodes
+
+	//get both register indexes
+	//they're always in the same place
+	//in the opcode
+	int x = (instruction & 0xF00) >> 8;
+	int y = (instruction & 0xF0) >> 4;
 
 	switch(leftNibble)
 	{
@@ -115,7 +127,7 @@ void Chip8::execute(const twoByte &instruction)
 			switch(instruction & 0xFF)
 			{
 				case 0xE0: //CLS
-					//clear the display
+					//TODO: clear the display
 					break;
 
 				case 0xEE: //RET
@@ -135,37 +147,195 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 		
 		case 0x3: //SE Vx, byte
-			regIndex = (instruction & 0xF00) >> 8;
-
-			if(registers[regIndex] == instruction & 0xFF)
+			if(V[x] == instruction & 0xFF)
 			{
 				ip += 2;
 			}
 			break;
 
 		case 0x4: //SNE Vx, byte
-			regIndex = (instruction & 0xF00) >> 8;
-
-			if(registers[regIndex] != instruction & 0xFF)
+			if(V[x] != instruction & 0xFF)
 			{
 				ip += 2;
 			}
 			break;
 
 		case 0x5: //SE Vx, Vy
-			regIndex = (instruction & 0xF00) >> 8;
-			regIndex2 = (instruction & 0x0F0) >> 4;
-				
-			if(registers[regIndex] == registers[regIndex2])
+			if(V[x] == V[y])
 			{
 				ip += 2;
 			}
 			break;
 
 		case 0x6: //LD Vx, byte
-			regIndex = (instruction & 0xF00) >> 8;
+			V[x] = instruction & 0xFF;
+			break;
 
-			registers[regIndex] = instruction & 0xFF;
+		case 0x7: //ADD Vx, byte
+			V[x] += instruction & 0xFF;
+			break;
+		case 0x8: //for operations involving both registers
+
+			switch(instruction & 0xF)
+			{	
+				case 0: //LD Vx, Vy
+					V[x] = V[y];	
+					break;
+
+				case 1: //OR Vx, Vy
+					V[x] |= V[y];
+					break;
+
+				case 2: //AND Vx, Vy
+					V[x] &= V[y];
+					break;
+
+				case 3: //XOR Vx, Vy
+					V[x] ^= V[y];
+					break;
+
+				case 4: //ADD Vx, Vy
+					{
+						twoByte result = V[x] + V[y];
+						
+						//set V[F] = overflow
+						result > 0xFF ? V[0xF] = 1 : V[0xF] = 0;
+						
+						//store the lowest 8 bits of the result in v[x]
+						V[x] = result & 0xFF;
+					}
+					break;
+
+				case 5: //SUB Vx, Vy
+					V[x] > V[y] ? V[0xF] = 1 : V[0xF] = 0;
+
+					V[x] -= V[y];
+					break;
+
+				case 6: //SHR Vx {, Vy}
+					V[0xF] = V[x] & 0x1;
+					V[x] >>= 1;
+					break;
+
+				case 7: //SUBN Vx, Vy
+					V[y] > V[x] ? V[0xF] = 1 : V[0xF] = 0;
+
+					V[x] = V[y] - V[x];
+					break;
+
+				case 0xE: //SHL Vx
+					//use 0x80 to get just the msb
+					V[0xF] = V[x] & 0x80;
+
+					V[x] <<= 1;
+					break;
+			}
+			break;
+
+		case 0x9: //SNE Vx, Vy
+			if(V[x] != V[y])
+			{
+				ip += 2;
+			}
+			break;
+
+		case 0xA: //LD I, addr
+			I = instruction & 0xFFF;
+			break;
+
+		case 0xB: //JP V0, addr
+			ip = V[0] + (instruction & 0xFFF);
+			break;
+
+		case 0xC: //RND Vx, byte
+			V[x] = std::rand() & (instruction & 0xFF);
+			break;
+
+		case 0xD: //DRW Vx, Vy, nibble
+			//TODO: draw sprite at I at x, y
+			
+			//for n byte sprite
+			std::cout << "Draw Sprite" << std::endl;
+			break;
+
+		case 0xE:
+			switch(instruction & 0xFF)
+			{
+				case 0x9E: //SKP Vx
+					if(keys[V[x]])
+					{
+						ip += 2;
+					}
+					break;
+					
+				case 0xA1: //SKNP Vx
+					if(!keys[V[x]])
+					{
+						ip += 2;
+					}
+					break;
+			}
+			break;
+
+		case 0xF:
+			switch(instruction & 0xFF)
+			{
+				case 7: //LD Vx, DT
+					V[x] = dt;
+					break;
+
+				case 0xA: //LD Vx, K
+					//TODO
+					break;
+
+				case 0x15: //LD DT, Vx
+					dt = V[x];
+					break;
+
+				case 0x18: //LD ST, Vx
+					st = V[x];
+					break;
+
+				case 0x1E: //ADD I, Vx
+					I += V[x];
+					break;
+
+				case 0x29: //LS F, Vx
+					//TODO: load font sprite rep. value Vx
+					std::cout << "LS F, Vx" << std::endl;
+				        ip -= 2; //run same instruction again
+					break;
+
+				case 0x33: //LD B, Vx
+					{
+						int val = V[x], mod = 0;
+
+						for(int i = 2; i >= 0; i--)
+						{
+							mod = val % 10;
+
+							memory[I + i] = mod;
+						
+							val -= mod;
+							val /= 10;
+						}
+					}
+					break;
+
+				case 0x55: //LD [I], Vx
+					for(int i = 0; i <= V[x]; i++)
+					{
+						memory[I + i] = V[i];
+					}
+					break;
+
+				case 0x65: //LD Vx, [I]
+					for(int i = 0; i <= V[x]; i++)
+					{
+						V[i] = memory[I + i];
+					}
+					break;
+			}
 			break;
 
 		default:
@@ -182,9 +352,13 @@ void Chip8::runSingleInstruction()
 	
 	//take first byte, left shift it, then or with second byte
 	//all instructions are two bytes
-	instruction = (memory[ip] << 8) | memory[ip+1];
+	instruction = memory[ip];
+	instruction <<= 8;
+	instruction |= memory[ip+1];
+	
+	printf("\nip: 0x%04X", ip);
+	printf("\nrunning opcode: %04X\n", instruction);
+
 	ip += 2; //inc ip
-
-
 	execute(instruction);
 }
