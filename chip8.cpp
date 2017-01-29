@@ -16,6 +16,31 @@ Chip8::Chip8()
 void Chip8::loadFont()
 {
 	//TODO: Load font to memory s. at 0	
+	unsigned char font[] = {
+		0xF0, 0x90, 0x90, 0x90, 0xF0, //0
+		0x20, 0x60, 0x20, 0x20, 0x70, //1
+		0xF0, 0x10, 0xF0, 0x80, 0xF0, //2
+		0xF0, 0x10, 0xF0, 0x10, 0xF0, //3
+		0x90, 0x90, 0xF0, 0x10, 0x10, //4
+		0xF0, 0x80, 0xF0, 0x10, 0xF0, //5
+		0xF0, 0x80, 0xF0, 0x90, 0xF0, //6
+		0xF0, 0x10, 0x20, 0x40, 0x40, //7
+		0xF0, 0x90, 0xF0, 0x90, 0xF0, //8
+		0xF0, 0x90, 0xF0, 0x10, 0xF0, //9
+		0xF0, 0x90, 0xF0, 0x90, 0x90, //A
+		0xE0, 0x90, 0xE0, 0x90, 0xE0, //B
+		0xF0, 0x80, 0x80, 0x80, 0xF0, //C
+		0xE0, 0x90, 0x90, 0x90, 0xE0, //D
+		0xF0, 0x80, 0xF0, 0x80, 0xF0, //E
+		0xF0, 0x80, 0xF0, 0x80, 0x80  //F
+	}; //80 bytes long (16 x 5b chars)
+
+	//copy the bytes into memory, starting at 0
+	for(int i = 0; i < 80; i++)
+	{
+		memory[i] = font[i];
+	}
+
 }
 
 void Chip8::memInit()
@@ -50,20 +75,20 @@ void Chip8::printMemory()
 	std::cout << "Registers" << std::endl;
 	for(int i = 0; i < NUM_REGS; i++)
 	{
-		 printf("V[%X]: %04X\n", i, V[i]);
+		 printf("V[%X]: 0x%04X\n", i, V[i]);
 	}
 
 	std::cout << "\nStack" << std::endl;
 	for(int i = 0; i < STACKSIZE; i++)
 	{
-		printf("%X: %04X\n", i, stack[i]);
+		printf("%X: 0x%04X\n", i, stack[i]);
 	}
 
-	printf("Stack pointer: %02X\n", sp);
-	printf("Sound Timer: %02X\n", st);
-	printf("Delay Timer: %02X\n", dt);	
+	printf("\nStack pointer: 0x%02X\n", sp);
+	printf("Sound Timer: 0x%02X\n", st);
+	printf("Delay Timer: 0x%02X\n", dt);	
 
-	printf("IP: %04X\n", ip);
+	printf("IP: 0x%04X\n", ip);
 
 	std::cout << std::endl << "Main Memory:" << std::endl;
 
@@ -72,7 +97,7 @@ void Chip8::printMemory()
 	//pretty print memory
 	for(int i = 0; i < MEMSIZE/linewidth; i++)
 	{
-		printf("%08X: ", linewidth*i);
+		printf("%04X: ", linewidth*i);
 
 		for(int j = i*linewidth; j < linewidth * (i + 1) - 1; j += 2)
 		{
