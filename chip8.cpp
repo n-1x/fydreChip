@@ -8,9 +8,18 @@
 
 Chip8::Chip8()
 {
+	printf("\nWelcome to Fydrechip!\n");
+	printf("---------------------------\n");
 	memInit();
 	//TODO: Random seed
 	srand(198276376);
+
+	screenUpdateNeeded = false;
+	//initialise the display to all off
+	for(int i = 0; i < 64*32; i++)
+	{
+		display[i] = false;
+	}
 }
 
 void Chip8::loadFont()
@@ -40,7 +49,6 @@ void Chip8::loadFont()
 	{
 		memory[i] = font[i];
 	}
-
 }
 
 void Chip8::memInit()
@@ -63,14 +71,14 @@ void Chip8::memInit()
 	st = 0;
 	dt = 0;
 
+	printf("Memory initialised.\n");
 	loadFont();
-	std::cout << "Memory initialised." << std::endl;
+	printf("Font loaded.\n");
 }
 
 void Chip8::printMemory()
 {
 	std::cout << "Beginning memory dump." << std::endl;
-	std::cout << "--------------------" << std::endl;
 
 	std::cout << "Registers" << std::endl;
 	for(int i = 0; i < NUM_REGS; i++)
@@ -89,6 +97,7 @@ void Chip8::printMemory()
 	printf("Delay Timer: 0x%02X\n", dt);	
 
 	printf("IP: 0x%04X\n", ip);
+	printf("I: 0x%04X\n", I);
 
 	std::cout << std::endl << "Main Memory:" << std::endl;
 
@@ -101,13 +110,35 @@ void Chip8::printMemory()
 
 		for(int j = i*linewidth; j < linewidth * (i + 1) - 1; j += 2)
 		{
-			printf("%02X%02X ", int(memory[j]), int(memory[j+1]));
+			printf("%02X %02X ", int(memory[j]), int(memory[j+1]));
 		}
 
 		std::cout << std::endl;
 	}
 	
 	std::cout << std::endl << "End of memory dump." << std::endl;	
+}
+
+void Chip8::printDisplay()
+{
+	std::cout << "\nPrinting display." << std::endl;
+	for(int y = 0; y < DISP_HEIGHT; y++)
+	{
+		int yVal = y * DISP_WIDTH;
+
+		for(int x = 0; x < DISP_WIDTH; x++)
+		{
+			if(display[yVal + x])
+			{
+				std::cout << "1";
+			}	
+			else
+			{
+				std::cout << "0";
+			}
+		}
+		std::cout << std::endl;
+	}
 }
 
 void Chip8::loadRom(const char *filePath)
@@ -127,7 +158,7 @@ void Chip8::loadRom(const char *filePath)
 			file.read((char *)memory + PROG_START_ADDR, size);
 			file.close();
 
-			std::cout << "Rom loaded into memory. Size:" << size << "b" << std::endl;
+			printf("Rom successfully loaded. Size: %db\n", size);
 		}
 	}
 	else 
@@ -145,14 +176,20 @@ void Chip8::execute(const twoByte &instruction)
 	//in the opcode
 	int x = (instruction & 0xF00) >> 8;
 	int y = (instruction & 0xF0) >> 4;
+	int nn = instruction & 0xFF;   //final byte of instruction
+	int nnn = instruction & 0xFFF; //final 12 bits ^
 
 	switch(leftNibble)
 	{
 		case 0x0: //we are ignoring 0nn SYS addr, it is no longer used
-			switch(instruction & 0xFF)
+			switch(nn)
 			{
 				case 0xE0: //CLS
-					//TODO: clear the display
+					for(int i = 0; i < DISP_WIDTH * DISP_HEIGHT; i++)
+					{
+						display[i] = false;
+					}
+					screenUpdateNeeded = true;
 					break;
 
 				case 0xEE: //RET
@@ -162,24 +199,24 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0x1: //JP addr
-			ip = instruction & 0xFFF;
+			ip = nnn;
 			break;
 
 		case 0x2: //CALL addr
 			sp += 1;
 			sp = ip;
-			ip = instruction & 0xFFF;
+			ip = nnn;
 			break;
 		
 		case 0x3: //SE Vx, byte
-			if(V[x] == instruction & 0xFF)
+			if(V[x] == nn)
 			{
 				ip += 2;
 			}
 			break;
 
 		case 0x4: //SNE Vx, byte
-			if(V[x] != instruction & 0xFF)
+			if(V[x] != nn)
 			{
 				ip += 2;
 			}
@@ -193,15 +230,15 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0x6: //LD Vx, byte
-			V[x] = instruction & 0xFF;
+			V[x] = nn; 
 			break;
 
 		case 0x7: //ADD Vx, byte
-			V[x] += instruction & 0xFF;
+			V[x] += nn;
 			break;
 		case 0x8: //for operations involving both registers
 
-			switch(instruction & 0xF)
+			switch(nn)
 			{	
 				case 0: //LD Vx, Vy
 					V[x] = V[y];	
@@ -251,7 +288,8 @@ void Chip8::execute(const twoByte &instruction)
 				case 0xE: //SHL Vx
 					//use 0x80 to get just the msb
 					V[0xF] = V[x] & 0x80;
-
+					
+					//store the msb in V[x]
 					V[x] <<= 1;
 					break;
 			}
@@ -265,24 +303,60 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0xA: //LD I, addr
-			I = instruction & 0xFFF;
+			I = nnn;
 			break;
 
 		case 0xB: //JP V0, addr
-			ip = V[0] + (instruction & 0xFFF);
+			ip = V[0] + nnn;
 			break;
 
 		case 0xC: //RND Vx, byte
-			V[x] = std::rand() & (instruction & 0xFF);
+			V[x] = std::rand() & nn;
 			break;
 
 		case 0xD: //DRW Vx, Vy, nibble
-			  //TODO: draw sprite at I at x, y
+			{
+				//length of sprite in bytes
+				int spriteLen = instruction & 0xF; 
+
+				//draw location is stored in V[x], V[y]
+				//stored location is in I
+				
+				V[0xF] = 0; //no collision yet
+
+				for(int row = 0; row < spriteLen; row++)
+				{
+					unsigned int line = memory[I + row];
+
+					//loop is backwards because the sprite is
+					//written right to left
+					for(int col = 7; col >= 0; col--)
+					{
+						//get correct row (%s are for wrapping)
+						//adding a V is the offset
+						int index = (((row + V[y]) % DISP_HEIGHT) * DISP_WIDTH);
+						//add x position
+						index += (col + V[x]) % DISP_WIDTH;	
+
+						int bit = line & 1;
+
+						if((bit == 1) && display[index] && (V[0xF] == 0))
+						{
+							V[0xF] = 1;
+						}
+						display[index] ^= (bit == 1);
+						
+						line >>= 1;
+
+					}
+				}
+			}			  
+			screenUpdateNeeded = true;
 			
 			break;
 
 		case 0xE:
-			switch(instruction & 0xFF)
+			switch(nn)
 			{
 				case 0x9E: //SKP Vx
 					if(keys[V[x]])
@@ -301,14 +375,14 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0xF:
-			switch(instruction & 0xFF)
+			switch(nn)
 			{
 				case 7: //LD Vx, DT
 					V[x] = dt;
 					break;
 
 				case 0xA: //LD Vx, K
-					//TODO
+					ip -= 2; //stop program progressing
 					break;
 
 				case 0x15: //LD DT, Vx
@@ -377,9 +451,7 @@ void Chip8::runSingleCycle()
 	instruction <<= 8;
 	instruction |= memory[ip+1];
 	
-	printf("\nip: 0x%04X", ip);
-	printf("\nrunning opcode: %04X\n", instruction);
-
+	//printf("\nExecuting instruction: %04X\nIP: %04X\n", instruction, ip);
 	ip += 2; //inc ip
 	execute(instruction);
 }
@@ -387,4 +459,23 @@ void Chip8::runSingleCycle()
 void Chip8::runInstruction(const twoByte &instruction)
 {
 	execute(instruction);
+}
+
+bool Chip8::drawFlag()
+{
+	bool temp = screenUpdateNeeded;
+
+	//here I'm assuming that if something asks for the draw flag,
+	//then it will draw the screen if it's true, so I can reset the
+	//flag.
+	if(screenUpdateNeeded)
+	{
+		screenUpdateNeeded = false;	
+	}
+	return temp;
+}
+
+bool *Chip8::getDisplay()
+{
+	return display;
 }
