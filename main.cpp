@@ -1,3 +1,7 @@
+//File: main.cpp
+//Author: Nicholas J D Dean
+//Date Created: 2017-01-27
+
 #include <iostream>
 #include "chip8.h"
 #include <SFML/Window.hpp>
@@ -5,8 +9,8 @@
 
 const int PIXEL_SIZE = 10,
           WIDTH = 64,
-	  HEIGHT = 32,
-	  NUM_PIXELS = WIDTH * HEIGHT;
+	       HEIGHT = 32,
+	       NUM_PIXELS = WIDTH * HEIGHT;
 
 const float SCALE = 1.0;
 
@@ -15,7 +19,16 @@ int main(int argc, char *argv[])
 	Chip8 chip;
 	int window_width = WIDTH * PIXEL_SIZE * SCALE,
 	    window_height = HEIGHT * PIXEL_SIZE * SCALE;
-	sf::Clock clock, cycleClock;
+	sf::Clock clock;
+
+	sf::Keyboard::Key keys[] = 
+	{
+		sf::Keyboard::Num1, sf::Keyboard::Num2, sf::Keyboard::Num3, sf::Keyboard::Num4,
+		sf::Keyboard::Q, sf::Keyboard::W, sf::Keyboard::E, sf::Keyboard::R,
+		sf::Keyboard::A, sf::Keyboard::S, sf::Keyboard::D, sf::Keyboard::F,
+		sf::Keyboard::Z, sf::Keyboard::X, sf::Keyboard::C, sf::Keyboard::V
+	};
+	bool keyPressed[16] = {false};
 
 	sf::RenderWindow window(sf::VideoMode(window_width, window_height), 
 			        "Fydrechip", 
@@ -77,13 +90,23 @@ int main(int argc, char *argv[])
 			window.draw(pixels[i]);
 		}
 
-		if(true)//cycleClock.getElapsedTime() >= sf::milliseconds(150))
+		//update keys
+		for(int i = 0; i < 0x10; ++i)
 		{
-			chip.runSingleCycle();
-			cycleClock.restart();
+			if(sf::Keyboard::isKeyPressed(keys[i]))
+			{
+				keyPressed[i] = true;
+			}
+			else
+			{
+				keyPressed[i] = false;
+			}
 		}
 
-		//decrement chip8 timers at correct frequency
+		chip.setKeys(keyPressed);
+		chip.runSingleCycle();
+
+		//decrement chip8 timers at correct frequency (60Hz)
 		if(clock.getElapsedTime() >= sf::milliseconds(1000/60)) 
 		{
 				chip.decTimers();
@@ -92,6 +115,5 @@ int main(int argc, char *argv[])
 
 		window.display();
 	}
-	
 	return 0;
 }
