@@ -36,14 +36,17 @@ class Chip8
 	public:
 		Chip8();
 
-		void printMemory();	
+		void printStack();
+		void printRegs();
+		void printMainMemory();
+		void printAllMemory();	
 		void printDisplay();
 		void loadRom(const char *filePath);
 		void runSingleCycle(); //1 fetch-decode-execute cycle
-		
-		//run the provided instruction
 		void runInstruction(const twoByte &instruction);  
 
+		void decTimers(); //decrement the delay and sound timers
 		bool drawFlag();
+		void setKeys();
 		bool *getDisplay();
 };
