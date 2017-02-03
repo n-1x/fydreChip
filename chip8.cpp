@@ -1,4 +1,8 @@
-//References: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#dispcoords
+//File: chip8.cpp
+//Author: Nicholas J D Dean
+//Date Created: 2017-01-27
+//References:
+//  http://devernay.free.fr/hacks/chpc8/C8TECH10.HTM#dispcoords
 
 #include <iostream>
 #include "chip8.h"
@@ -19,7 +23,7 @@ Chip8::Chip8()
 	screenUpdateNeeded = false;
 	
 	//initialise the display, all pixels start off
-	for(int i = 0; i < 64*32; i++)
+	for(int i = 0; i < DISP_WIDTH * DISP_HEIGHT; i++)
 	{
 		display[i] = false;
 	}
@@ -77,7 +81,7 @@ void Chip8::memInit()
 		stack[i] = 0;    
 	}
 
-	ip = PROG_START_ADDR; //where programs start
+	pc = PROG_START_ADDR; //where programs start
 	sp = 0;
 	st = 0;
 	dt = 0;
@@ -119,7 +123,7 @@ void Chip8::printRegs()
 	printf("\nSP: 0x%02X\n", sp);
 	printf("ST: 0x%02X\n", st);
 	printf("DT: 0x%02X\n", dt);	
-	printf("IP: 0x%04X\n", ip);
+	printf("IP: 0x%04X\n", pc);
 	printf("I: 0x%04X\n\n", I);
 }
 
@@ -181,22 +185,26 @@ void Chip8::printDisplay()
 //memory starting at PROG_START_ADDR
 void Chip8::loadRom(const char *filePath)
 {
-	std::ifstream file(filePath, std::ios::in | 
-			             std::ios::binary | 
-				     std::ios::ate);
+	//open the file from the end
+	std::ifstream file(filePath, std::ios::in |     //input 
+			                       std::ios::binary | //binary mode
+				     		           std::ios::ate);    //start at end
 	std::streampos size;
 
 	if (file.is_open())
 	{
-		size = file.tellg();
+		size = file.tellg(); //started at end, so tellg is size
 
+		//if rom fits in memory
 		if(size <= MEMSIZE - PROG_START_ADDR)
 		{
+			//go to beginning
 			file.seekg(0, std::ios::beg);
+
 			file.read((char *)memory + PROG_START_ADDR, size);
 			file.close();
 
-			printf("Rom successfully loaded. Size: %db\n", size);
+			printf("Rom successfully loaded. Size: %d bytes\n", size);
 		}
 	}
 	else 
@@ -232,40 +240,40 @@ void Chip8::execute(const twoByte &instruction)
 					break;
 
 				case 0xEE: //RET
-					ip = stack[sp];
+					pc = stack[sp];
 					--sp;
 					break;
 			}
 			break;
 
 		case 0x1: //JP addr
-			ip = nnn;
+			pc = nnn;
 			break;
 
 		case 0x2: //CALL addr
 			++sp;
-			stack[sp] = ip;
-			ip = nnn;
+			stack[sp] = pc;
+			pc = nnn;
 			break;
 		
 		case 0x3: //SE Vx, byte
 			if(V[x] == nn)
 			{
-				ip += 2;
+				pc += 2;
 			}
 			break;
 
 		case 0x4: //SNE Vx, byte
 			if(V[x] != nn)
 			{
-				ip += 2;
+				pc += 2;
 			}
 			break;
 
 		case 0x5: //SE Vx, Vy
 			if(V[x] == V[y])
 			{
-				ip += 2;
+				pc += 2;
 			}
 			break;
 
@@ -330,7 +338,7 @@ void Chip8::execute(const twoByte &instruction)
 					//use 0x80 to get just the msb
 					V[0xF] = (V[x] & 0x80) >> 7;
 					
-					//multiply by 2
+					//multpcly by 2
 					V[x] <<= 1;
 					break;
 			}
@@ -339,7 +347,7 @@ void Chip8::execute(const twoByte &instruction)
 		case 0x9: //SNE Vx, Vy
 			if(V[x] != V[y])
 			{
-				ip += 2;
+				pc += 2;
 			}
 			break;
 
@@ -348,7 +356,7 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0xB: //JP V0, addr
-			ip = V[0] + nnn;
+			pc = V[0] + nnn;
 			break;
 
 		case 0xC: //RND Vx, byte
@@ -402,14 +410,14 @@ void Chip8::execute(const twoByte &instruction)
 				case 0x9E: //SKP Vx
 					if(keys[V[x]])
 					{
-						ip += 2;
+						pc += 2;
 					}
 					break;
 					
 				case 0xA1: //SKNP Vx
 					if(!keys[V[x]])
 					{
-						ip += 2;
+						pc += 2;
 					}
 					break;
 			}
@@ -423,8 +431,25 @@ void Chip8::execute(const twoByte &instruction)
 					break;
 
 				case 0xA: //LD Vx, K
-					ip -= 2; //stop program progressing
-					printf("WFK");
+					pc -= 2; //stop program progressing
+					{
+						bool found = false;
+						int counter = 0;
+
+						//check all keys
+						while(!found && counter < 16)
+						{
+							found = keys[counter] == true;
+							
+							//found a key, store value in V[x]
+							if(found) 
+							{
+								V[x] = counter;
+								pc += 2; //resume progression	
+							}
+							++counter;
+						}
+					}
 					break;
 
 				case 0x15: //LD DT, Vx
@@ -489,12 +514,12 @@ void Chip8::runSingleCycle()
 	
 	//take first byte, left shift it, then or with second byte
 	//all instructions are two bytes
-	instruction = memory[ip];
+	instruction = memory[pc];
 	instruction <<= 8;
-	instruction |= memory[ip+1];
+	instruction |= memory[pc+1];
 	
-	//printf("\nExecuting instruction: %04X\nIP: %04X\n", instruction, ip);
-	ip += 2; //inc ip
+	//printf("\nExecuting instruction: %04X\nIP: %04X\n", instruction, pc);
+	pc += 2; //inc pc
 
 	execute(instruction);
 }
@@ -509,6 +534,14 @@ void Chip8::decTimers()
 	if(st > 0)
 	{
 		--st;
+	}
+}
+
+void Chip8::setKeys(bool keyStates[16])
+{
+	for(int i = 0; i < 16; ++i)
+	{
+		keys[i] = keyStates[i];
 	}
 }
 
