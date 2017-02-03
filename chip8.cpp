@@ -5,17 +5,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <time.h>
 
 Chip8::Chip8()
 {
 	printf("\nWelcome to Fydrechip!\n");
 	printf("---------------------------\n");
 	memInit();
-	//TODO: Random seed
-	srand(198276376);
+
+	//seed with current time
+	srand(time(NULL));
 
 	screenUpdateNeeded = false;
-	//initialise the display to all off
+	
+	//initialise the display, all pixels start off
 	for(int i = 0; i < 64*32; i++)
 	{
 		display[i] = false;
@@ -51,6 +54,12 @@ void Chip8::loadFont()
 	}
 }
 
+//this will prepare the memory such
+//that a rom can be loaded and run after
+//this function's operation.
+//This means that is also has to load
+//the font, which has been split to a
+//separate function
 void Chip8::memInit()
 {
 	//initialise main memory
@@ -59,6 +68,7 @@ void Chip8::memInit()
 		memory[i] = 0;
 	}
 
+	//initialise all registers
 	for(int i = 0; i < NUM_REGS; i++)
 	{
 		V[i] = 0;
@@ -66,6 +76,7 @@ void Chip8::memInit()
 		//CAREFULL, assert stacksize = num V
 		stack[i] = 0;    
 	}
+
 	ip = PROG_START_ADDR; //where programs start
 	sp = 0;
 	st = 0;
@@ -76,34 +87,48 @@ void Chip8::memInit()
 	printf("Font loaded.\n");
 }
 
-void Chip8::printMemory()
+void Chip8::printStack()
 {
-	std::cout << "Beginning memory dump." << std::endl;
+	printf("\nStack");
 
-	std::cout << "Registers" << std::endl;
+	for(int i = 0; i < STACKSIZE; i++)
+	{
+		printf("%X: 0x%04X", i, stack[i]);
+
+		//print an arrow to show
+		//where sp is pointing
+		if(i == sp)
+		{
+			printf(" <-- ");
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+void Chip8::printRegs()
+{
+	printf("Registers");
+
 	for(int i = 0; i < NUM_REGS; i++)
 	{
 		 printf("V[%X]: 0x%04X\n", i, V[i]);
 	}
 
-	std::cout << "\nStack" << std::endl;
-	for(int i = 0; i < STACKSIZE; i++)
-	{
-		printf("%X: 0x%04X\n", i, stack[i]);
-	}
-
-	printf("\nStack pointer: 0x%02X\n", sp);
-	printf("Sound Timer: 0x%02X\n", st);
-	printf("Delay Timer: 0x%02X\n", dt);	
-
+	//print single values
+	printf("\nSP: 0x%02X\n", sp);
+	printf("ST: 0x%02X\n", st);
+	printf("DT: 0x%02X\n", dt);	
 	printf("IP: 0x%04X\n", ip);
-	printf("I: 0x%04X\n", I);
+	printf("I: 0x%04X\n\n", I);
+}
 
+void Chip8::printMainMemory()
+{
 	std::cout << std::endl << "Main Memory:" << std::endl;
 
 	int linewidth = 16;
-
-	//pretty print memory
+	//pretty print main memory
 	for(int i = 0; i < MEMSIZE/linewidth; i++)
 	{
 		printf("%04X: ", linewidth*i);
@@ -112,22 +137,33 @@ void Chip8::printMemory()
 		{
 			printf("%02X %02X ", int(memory[j]), int(memory[j+1]));
 		}
-
-		std::cout << std::endl;
+		printf("\n");
 	}
-	
-	std::cout << std::endl << "End of memory dump." << std::endl;	
 }
 
+void Chip8::printAllMemory()
+{
+	printf("Beginning memory dump.");
+
+	printStack();
+	printRegs();
+	printMainMemory();
+
+	printf("End of memory dump.");
+}
+
+//print a representation of the internal
+//copy of the display to stdout
 void Chip8::printDisplay()
 {
 	std::cout << "\nPrinting display." << std::endl;
-	for(int y = 0; y < DISP_HEIGHT; y++)
+	for(int y = 0; y < DISP_HEIGHT; y++) //rows
 	{
 		int yVal = y * DISP_WIDTH;
 
-		for(int x = 0; x < DISP_WIDTH; x++)
+		for(int x = 0; x < DISP_WIDTH; x++) //columns
 		{
+			//print a 1 for an on pixel, 0 for off
 			if(display[yVal + x])
 			{
 				std::cout << "1";
@@ -141,6 +177,8 @@ void Chip8::printDisplay()
 	}
 }
 
+//takes the file at the given path and loads it into
+//memory starting at PROG_START_ADDR
 void Chip8::loadRom(const char *filePath)
 {
 	std::ifstream file(filePath, std::ios::in | 
@@ -167,9 +205,10 @@ void Chip8::loadRom(const char *filePath)
 	}
 }
 
+//runs any instruction given to it
 void Chip8::execute(const twoByte &instruction)
 {
-	int leftNibble = (instruction & 0xF000) >> 12;
+	int leftTribble = (instruction & 0xF000) >> 12;
 
 	//get both register indexes
 	//they're always in the same place
@@ -179,7 +218,7 @@ void Chip8::execute(const twoByte &instruction)
 	int nn = instruction & 0xFF;   //final byte of instruction
 	int nnn = instruction & 0xFFF; //final 12 bits ^
 
-	switch(leftNibble)
+	switch(leftTribble)
 	{
 		case 0x0: //we are ignoring 0nn SYS addr, it is no longer used
 			switch(nn)
@@ -193,7 +232,8 @@ void Chip8::execute(const twoByte &instruction)
 					break;
 
 				case 0xEE: //RET
-					ip = stack[sp--];
+					ip = stack[sp];
+					--sp;
 					break;
 			}
 			break;
@@ -203,8 +243,8 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 
 		case 0x2: //CALL addr
-			sp += 1;
-			sp = ip;
+			++sp;
+			stack[sp] = ip;
 			ip = nnn;
 			break;
 		
@@ -238,7 +278,7 @@ void Chip8::execute(const twoByte &instruction)
 			break;
 		case 0x8: //for operations involving both registers
 
-			switch(nn)
+			switch(instruction & 0xF)
 			{	
 				case 0: //LD Vx, Vy
 					V[x] = V[y];	
@@ -258,7 +298,8 @@ void Chip8::execute(const twoByte &instruction)
 
 				case 4: //ADD Vx, Vy
 					{
-						twoByte result = V[x] + V[y];
+						twoByte result = V[x];
+						result += V[y];
 						
 						//set V[F] = overflow
 						result > 0xFF ? V[0xF] = 1 : V[0xF] = 0;
@@ -287,9 +328,9 @@ void Chip8::execute(const twoByte &instruction)
 
 				case 0xE: //SHL Vx
 					//use 0x80 to get just the msb
-					V[0xF] = V[x] & 0x80;
+					V[0xF] = (V[x] & 0x80) >> 7;
 					
-					//store the msb in V[x]
+					//multiply by 2
 					V[x] <<= 1;
 					break;
 			}
@@ -318,19 +359,20 @@ void Chip8::execute(const twoByte &instruction)
 			{
 				//length of sprite in bytes
 				int spriteLen = instruction & 0xF; 
-
+				
 				//draw location is stored in V[x], V[y]
 				//stored location is in I
 				
 				V[0xF] = 0; //no collision yet
 
-				for(int row = 0; row < spriteLen; row++)
+				for(int row = 0; row < spriteLen; ++row)
 				{
 					unsigned int line = memory[I + row];
 
 					//loop is backwards because the sprite is
-					//written right to left
-					for(int col = 7; col >= 0; col--)
+					//written right to left due to how the single bits
+					//are being taken out of the instruction
+					for(int col = 7; col >= 0; --col)
 					{
 						//get correct row (%s are for wrapping)
 						//adding a V is the offset
@@ -340,11 +382,11 @@ void Chip8::execute(const twoByte &instruction)
 
 						int bit = line & 1;
 
-						if((bit == 1) && display[index] && (V[0xF] == 0))
+						if((bit == 1) && display[index])
 						{
 							V[0xF] = 1;
 						}
-						display[index] ^= (bit == 1);
+						display[index] ^= bit;
 						
 						line >>= 1;
 
@@ -352,7 +394,6 @@ void Chip8::execute(const twoByte &instruction)
 				}
 			}			  
 			screenUpdateNeeded = true;
-			
 			break;
 
 		case 0xE:
@@ -383,6 +424,7 @@ void Chip8::execute(const twoByte &instruction)
 
 				case 0xA: //LD Vx, K
 					ip -= 2; //stop program progressing
+					printf("WFK");
 					break;
 
 				case 0x15: //LD DT, Vx
@@ -405,7 +447,7 @@ void Chip8::execute(const twoByte &instruction)
 					{
 						int val = V[x], mod = 0;
 
-						for(int i = 2; i >= 0; i--)
+						for(int i = 2; i >= 0; --i)
 						{
 							mod = val % 10;
 
@@ -418,14 +460,14 @@ void Chip8::execute(const twoByte &instruction)
 					break;
 
 				case 0x55: //LD [I], Vx
-					for(int i = 0; i <= V[x]; i++)
+					for(int i = 0; i <= x; ++i)
 					{
 						memory[I + i] = V[i];
 					}
 					break;
 
 				case 0x65: //LD Vx, [I]
-					for(int i = 0; i <= V[x]; i++)
+					for(int i = 0; i <= x; ++i)
 					{
 						V[i] = memory[I + i];
 					}
@@ -453,7 +495,21 @@ void Chip8::runSingleCycle()
 	
 	//printf("\nExecuting instruction: %04X\nIP: %04X\n", instruction, ip);
 	ip += 2; //inc ip
+
 	execute(instruction);
+}
+
+void Chip8::decTimers()
+{
+	if(dt > 0)
+	{
+		--dt;
+	}
+
+	if(st > 0)
+	{
+		--st;
+	}
 }
 
 void Chip8::runInstruction(const twoByte &instruction)
