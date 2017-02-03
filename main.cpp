@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
 	Chip8 chip;
 	int window_width = WIDTH * PIXEL_SIZE * SCALE,
 	    window_height = HEIGHT * PIXEL_SIZE * SCALE;
+	sf::Clock clock, cycleClock;
 
 	sf::RenderWindow window(sf::VideoMode(window_width, window_height), 
 			        "Fydrechip", 
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
 		pixels[i].setFillColor(sf::Color(0, 0, 0));
 	}
 
+	//main window loop
 	while(window.isOpen())
 	{
 		sf::Event event;
@@ -49,6 +51,8 @@ int main(int argc, char *argv[])
 
 		window.clear(sf::Color::Black);
 
+		//update the screen if there has been a draw
+		//by the emulator
 		if(chip.drawFlag())
 		{
 			//update the screen
@@ -67,11 +71,25 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		//draw all pixels
 		for(int i = 0; i < NUM_PIXELS; i++)
 		{
 			window.draw(pixels[i]);
 		}
-		chip.runSingleCycle();
+
+		if(true)//cycleClock.getElapsedTime() >= sf::milliseconds(150))
+		{
+			chip.runSingleCycle();
+			cycleClock.restart();
+		}
+
+		//decrement chip8 timers at correct frequency
+		if(clock.getElapsedTime() >= sf::milliseconds(1000/60)) 
+		{
+				chip.decTimers();
+				clock.restart();
+		}
+
 		window.display();
 	}
 	
