@@ -2,7 +2,7 @@
 //Author: Nicholas J D Dean
 //Date Created: 2017-01-27
 //References:
-//  http://devernay.free.fr/hacks/chpc8/C8TECH10.HTM#dispcoords
+//  http://devernay.free.fr/hacks/chpc8/C8TECH10.HTM
 
 #include <iostream>
 #include "chip8.h"
@@ -13,21 +13,13 @@
 
 Chip8::Chip8()
 {
-	printf("\nWelcome to Fydrechip!\n");
-	printf("---------------------------\n");
-	memInit();
+	hardReset();
 
 	//seed with current time
 	srand(time(NULL));
-
-	screenUpdateNeeded = false;
-	
-	//initialise the display, all pixels start off
-	for(int i = 0; i < DISP_WIDTH * DISP_HEIGHT; i++)
-	{
-		display[i] = false;
-	}
 }
+
+
 
 void Chip8::loadFont()
 {
@@ -58,14 +50,18 @@ void Chip8::loadFont()
 	}
 }
 
+
+
 //this will prepare the memory such
 //that a rom can be loaded and run after
 //this function's operation.
 //This means that is also has to load
 //the font, which has been split to a
 //separate function
-void Chip8::memInit()
+void Chip8::hardReset()
 {
+	screenUpdateNeeded = false;
+
 	//initialise main memory
 	for(int i = 0; i < MEMSIZE; i++)
 	{
@@ -81,19 +77,31 @@ void Chip8::memInit()
 		stack[i] = 0;    
 	}
 
+	for(int i = 0; i < 0x10; ++i)
+	{
+		keys[i] = false;
+	}
+
+	//initialise the display, all pixels start off
+	for(int i = 0; i < DISP_SIZE; i++)
+	{
+		display[i] = false;
+	}
+
 	pc = PROG_START_ADDR; //where programs start
 	sp = 0;
 	st = 0;
 	dt = 0;
+	I = 0;
 
-	printf("Memory initialised.\n");
 	loadFont();
-	printf("Font loaded.\n");
 }
+
+
 
 void Chip8::printStack()
 {
-	printf("\nStack");
+	printf("\nStack\n");
 
 	for(int i = 0; i < STACKSIZE; i++)
 	{
@@ -109,6 +117,8 @@ void Chip8::printStack()
 	}
 	printf("\n");
 }
+
+
 
 void Chip8::printRegs()
 {
@@ -127,11 +137,14 @@ void Chip8::printRegs()
 	printf("I: 0x%04X\n\n", I);
 }
 
+
+
 void Chip8::printMainMemory()
 {
-	std::cout << std::endl << "Main Memory:" << std::endl;
-
 	int linewidth = 16;
+
+	printf("\nMain Memory:\n");
+
 	//pretty print main memory
 	for(int i = 0; i < MEMSIZE/linewidth; i++)
 	{
@@ -145,6 +158,8 @@ void Chip8::printMainMemory()
 	}
 }
 
+
+
 void Chip8::printAllMemory()
 {
 	printf("Beginning memory dump.");
@@ -156,11 +171,13 @@ void Chip8::printAllMemory()
 	printf("End of memory dump.");
 }
 
+
+
 //print a representation of the internal
 //copy of the display to stdout
 void Chip8::printDisplay()
 {
-	std::cout << "\nPrinting display." << std::endl;
+	printf("\nPrinting display.\n");
 	for(int y = 0; y < DISP_HEIGHT; y++) //rows
 	{
 		int yVal = y * DISP_WIDTH;
@@ -170,16 +187,18 @@ void Chip8::printDisplay()
 			//print a 1 for an on pixel, 0 for off
 			if(display[yVal + x])
 			{
-				std::cout << "1";
+				printf("1");
 			}	
 			else
 			{
-				std::cout << "0";
+				printf("0");
 			}
 		}
-		std::cout << std::endl;
+		printf("\n");
 	}
 }
+
+
 
 //takes the file at the given path and loads it into
 //memory starting at PROG_START_ADDR
@@ -187,9 +206,9 @@ void Chip8::loadRom(const char *filePath)
 {
 	//open the file from the end
 	std::ifstream file(filePath, std::ios::in |     //input 
-			                       std::ios::binary | //binary mode
-				     		           std::ios::ate);    //start at end
-	std::streampos size;
+			                     std::ios::binary | //binary mode
+				     		     std::ios::ate);    //start at end
+	std::streampos size; //will hold filesize
 
 	if (file.is_open())
 	{
@@ -203,28 +222,29 @@ void Chip8::loadRom(const char *filePath)
 
 			file.read((char *)memory + PROG_START_ADDR, size);
 			file.close();
-
-			printf("Rom successfully loaded. Size: %d bytes\n", size);
 		}
 	}
 	else 
 	{
-		std::cout << "Unable to load file." << std::endl;
+		printf("Unable to load file.");
 	}
 }
 
-//runs any instruction given to it
+
+
 void Chip8::execute(const twoByte &instruction)
 {
-	int leftTribble = (instruction & 0xF000) >> 12;
+	//tribble is a great word. It means 12 bits.
+	int leftTribble = (instruction & 0xF000) >> 12; //most significant tribble
 
 	//get both register indexes
 	//they're always in the same place
-	//in the opcode
-	int x = (instruction & 0xF00) >> 8;
-	int y = (instruction & 0xF0) >> 4;
-	int nn = instruction & 0xFF;   //final byte of instruction
-	int nnn = instruction & 0xFFF; //final 12 bits ^
+	//in the opcode. Notation is the same
+	//as in the reference.
+	int x = (instruction & 0xF00) >> 8, //index of v
+	    y = (instruction & 0xF0) >> 4,  //index of v
+        nn = instruction & 0xFF,        //final byte of instruction
+	    nnn = instruction & 0xFFF;      //least significant tribble
 
 	switch(leftTribble)
 	{
@@ -242,6 +262,10 @@ void Chip8::execute(const twoByte &instruction)
 				case 0xEE: //RET
 					pc = stack[sp];
 					--sp;
+					break;
+
+				default:
+					printf("Unknown instruction: 0x%04X\n", instruction );
 					break;
 			}
 			break;
@@ -284,6 +308,7 @@ void Chip8::execute(const twoByte &instruction)
 		case 0x7: //ADD Vx, byte
 			V[x] += nn;
 			break;
+
 		case 0x8: //for operations involving both registers
 
 			switch(instruction & 0xF)
@@ -341,6 +366,10 @@ void Chip8::execute(const twoByte &instruction)
 					//multpcly by 2
 					V[x] <<= 1;
 					break;
+
+				default:
+					printf("Unknown instruction: 0x%04X\n", instruction );
+					break;
 			}
 			break;
 
@@ -384,7 +413,7 @@ void Chip8::execute(const twoByte &instruction)
 					{
 						//get correct row (%s are for wrapping)
 						//adding a V is the offset
-						int index = (((row + V[y]) % DISP_HEIGHT) * DISP_WIDTH);
+						int index = ((row + V[y]) % DISP_HEIGHT) * DISP_WIDTH;
 						//add x position
 						index += (col + V[x]) % DISP_WIDTH;	
 
@@ -397,7 +426,6 @@ void Chip8::execute(const twoByte &instruction)
 						display[index] ^= bit;
 						
 						line >>= 1;
-
 					}
 				}
 			}			  
@@ -419,6 +447,10 @@ void Chip8::execute(const twoByte &instruction)
 					{
 						pc += 2;
 					}
+					break;
+
+				default:
+					printf("Unknown instruction: 0x%04X\n", instruction );
 					break;
 			}
 			break;
@@ -497,6 +529,10 @@ void Chip8::execute(const twoByte &instruction)
 						V[i] = memory[I + i];
 					}
 					break;
+				
+				default:
+					printf("Unknown instruction: 0x%04X\n", instruction );
+					break;
 			}
 			break;
 
@@ -506,6 +542,8 @@ void Chip8::execute(const twoByte &instruction)
 
 	}
 }
+
+
 
 void Chip8::runSingleCycle()
 {
@@ -518,11 +556,12 @@ void Chip8::runSingleCycle()
 	instruction <<= 8;
 	instruction |= memory[pc+1];
 	
-	//printf("\nExecuting instruction: %04X\nIP: %04X\n", instruction, pc);
 	pc += 2; //inc pc
 
 	execute(instruction);
 }
+
+
 
 void Chip8::decTimers()
 {
@@ -537,6 +576,8 @@ void Chip8::decTimers()
 	}
 }
 
+
+
 void Chip8::setKeys(bool keyStates[16])
 {
 	for(int i = 0; i < 16; ++i)
@@ -545,10 +586,14 @@ void Chip8::setKeys(bool keyStates[16])
 	}
 }
 
+
+
 void Chip8::runInstruction(const twoByte &instruction)
 {
 	execute(instruction);
 }
+
+
 
 bool Chip8::drawFlag()
 {
@@ -564,6 +609,17 @@ bool Chip8::drawFlag()
 	return temp;
 }
 
+
+
+bool Chip8::soundFlag()
+{
+	return st > 0;
+}
+
+
+
+//should probably not use an array here so the
+//size doesn't have to be assumed
 bool *Chip8::getDisplay()
 {
 	return display;
