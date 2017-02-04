@@ -7,16 +7,20 @@
 //functions to be called externally to deal with things
 //such as timing, keyboard and display.
 //
-//Firstly, you must call decTimers() at 60Hz.
+//Firstly, decTimers() must be called at 60Hz.
 //
-//Secondly, you must call getDisplay() when drawFlag() == true 
-//to retrieve the graphical output.
+//Secondly, getDisplay() must be called when drawFlag() == true 
+//to retrieve the graphical output. It should be noted that 
+//calling drawFlag() sets it to false, because it is assumed
+//that if drawFlag() == true, you will draw the screen.
 //
-//Finally, you have to send it an array of booleans that tracks
-//the state of the 16 keys that should be attached.
+//Finally, the object must me sent an array of 16 booleans that 
+//holds the state of the keys.
 //
 //Once these systems are in place, loadRom() then call
 //runSingleCycle() as often as possible.
+//
+//Use soundFlag() to determine if the sound should currently be playing
 
 class Chip8
 {
@@ -29,7 +33,8 @@ class Chip8
 		static const int NUM_REGS = 16;    //16 GP registers
 
 		static const int DISP_WIDTH = 64,
-	                    DISP_HEIGHT = 32;
+					     DISP_HEIGHT = 32,
+		                 DISP_SIZE = DISP_WIDTH * DISP_HEIGHT;
 
 		static const twoByte PROG_START_ADDR = 0x200;
 
@@ -44,11 +49,10 @@ class Chip8
 		twoByte stack[STACKSIZE]; //the stack
 
 		bool keys[16],            //holds the state of every key on the keyboard
-		     display[64*32];      //on/off state of all the pixels
+		     display[DISP_SIZE];  //on/off state of all the pixels
 		bool screenUpdateNeeded;
 
 		//initialise all internal storage components
-		void memInit();
 		void loadFont();
 
 		//decode and run an instruction
@@ -56,21 +60,37 @@ class Chip8
 	public:
 		Chip8();
 
+		//reset everything to it's default state
+		//rom will need to be reloaded
+		void hardReset();
+
 		//functions for writing stuff to stdout
 		//only used for debugging
-
 		void printStack();
 		void printRegs();
 		void printMainMemory();
-		void printAllMemory();	
+		void printAllMemory(); //prints all except display
 		void printDisplay();
 
 		void loadRom(const char *filePath);
+
 		void runSingleCycle(); //1 fetch-decode-execute cycle
+
+		//executes the given instruction
 		void runInstruction(const twoByte &instruction);  
 
-		void decTimers(); //decrement the delay and sound timers
-		bool drawFlag();  //does the screen need to be redrawn
-		void setKeys(bool keyStates[16]); //assign the state of all keys
-		bool *getDisplay();
+		//decrement the delay and sound timers
+		void decTimers(); 
+
+		//does the screen need to be redrawn
+		bool drawFlag();
+
+		//should the sound be playing
+		bool soundFlag(); 		
+		
+		 //assign the state of all keys
+		void setKeys(bool keyStates[16]);		
+		
+		//return the value of all pixels
+		bool *getDisplay(); 
 };
